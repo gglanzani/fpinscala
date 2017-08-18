@@ -1,19 +1,31 @@
 package fpinscala.errorhandling
 
 
-import scala.{Option => _, Some => _, Either => _, _} // hide std library `Option`, `Some` and `Either`, since we are writing our own in this chapter
+import fpinscala.errorhandling
+
+import scala.{Either => _, Option => _, Some => _, _} // hide std library `Option`, `Some` and `Either`, since we are writing our own in this chapter
 
 sealed trait Option[+A] {
-  def map[B](f: A => B): Option[B] = ???
+  def map[B](f: A => B): Option[B] = this match {
+    case None => None
+    case Some(value) => Some(f(value))
+  }
 
-  def getOrElse[B>:A](default: => B): B = ???
+  def getOrElse[B>:A](default: => B): B = this match {
+    case None => default
+    case Some(value) => value
+  }
 
-  def flatMap[B](f: A => Option[B]): Option[B] = ???
+  def flatMap[B](f: A => Option[B]): Option[B] = this map f getOrElse None
 
-  def orElse[B>:A](ob: => Option[B]): Option[B] = ???
+  def orElse[B>:A](ob: => Option[B]): Option[B] = this map(Some(_)) getOrElse ob
 
-  def filter(f: A => Boolean): Option[A] = ???
+  def filter(f: A => Boolean): Option[A] = this match {
+    case Some(value) if f(value) => this
+    case _ => None
+  }
 }
+
 case class Some[+A](get: A) extends Option[A]
 case object None extends Option[Nothing]
 
@@ -38,11 +50,45 @@ object Option {
   def mean(xs: Seq[Double]): Option[Double] =
     if (xs.isEmpty) None
     else Some(xs.sum / xs.length)
-  def variance(xs: Seq[Double]): Option[Double] = ???
 
-  def map2[A,B,C](a: Option[A], b: Option[B])(f: (A, B) => C): Option[C] = ???
+  def variance(xs: Seq[Double]): Option[Double] = {
+    val avg = mean(xs)
+    avg.flatMap((x) => mean(xs.map((y) => math.pow(x - y, 2))))
+  }
 
-  def sequence[A](a: List[Option[A]]): Option[List[A]] = ???
+  def map2[A,B,C](a: Option[A], b: Option[B])(f: (A, B) => C): Option[C] = (a, b) match {
+    case (Some(va), Some(vb)) => Some(f(va, vb))
+    case _ => None
+  }
 
-  def traverse[A, B](a: List[A])(f: A => Option[B]): Option[List[B]] = ???
+
+//  def _sequence[A](as: List[Option[A]]): List[A] = as match {
+//  }
+
+  def combine[A](a: Option[A], as: Option[List[A]]): Option[List[A]] = (a, as) match {
+    case (None, _) => None
+    case (_, None) => None
+    case (Some(av), Some(asv)) => Some(av::asv)
+  }
+
+
+//  def sequence[A](as: List[Option[A]]): Option[List[A]] = {
+//    if (as.contains(None)) None
+//    else Some(as.map(_ match { case Some(va) => va}))
+//  }
+
+    def sequence[A](as: List[Option[A]]): Option[List[A]] = {
+      traverse(as)(x => x)
+    }
+
+  def traverse[A, B](a: List[A])(f: A => Option[B]): Option[List[B]] = _traverse(Some(a))(f)
+
+  def _traverse[A, B](a: Option[List[A]])(f: A => Option[B]): Option[List[B]] = a match {
+    case None => None
+    case Some(Nil) => Some(Nil)
+    case Some(av::asv) => f(av) match {
+      case None => None
+      case Some(avv) => combine(Some(avv), _traverse(Some(asv))(f))
+    }
+  }
 }
